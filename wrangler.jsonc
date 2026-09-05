@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lingviora-words-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-02",
+  "d1_databases": [{ "binding": "DB", "database_name": "lingviora-words-local", "database_id": "local", "migrations_dir": "drizzle" }],
+  "vars": {
+    "APP_ENV": "development",
+    "APP_BASE_URL": "http://localhost:5173",
+    "ALLOWED_ORIGINS": "http://localhost:5173",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "ALLOW_TEST_MAILBOX": "true"
+  }
+}

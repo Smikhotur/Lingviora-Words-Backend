@@ -1,0 +1,27 @@
+{
+  "name": "@lingviora/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+    "db:production": "wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc",
+    "deploy:production": "wrangler deploy --config wrangler.production.jsonc"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260831.1",
+    "@types/node": "^24.3.0",
+    "drizzle-kit": "0.31.10",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3",
+    "wrangler": "4.128.0"
+  }
+}

@@ -1,0 +1,16 @@
+services:
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports: ["1025:1025", "8025:8025"]
+  mailhog-relay:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    environment:
+      PORT: "8026"
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      MAILER_HTTP_TOKEN: dev-mailhog-token
+    ports: ["8026:8026"]
+    volumes: ["./mailhog-relay:/app:ro"]
+    depends_on: [mailhog]
