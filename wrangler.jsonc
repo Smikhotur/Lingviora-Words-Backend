@@ -3,12 +3,52 @@
   "name": "lingviora-words-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-02",
-  "d1_databases": [{ "binding": "DB", "database_name": "lingviora-words-local", "database_id": "local", "migrations_dir": "drizzle" }],
+
+  // Local development
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lingviora-words-local",
+      "database_id": "local",
+      "migrations_dir": "drizzle",
+    },
+  ],
   "vars": {
     "APP_ENV": "development",
     "APP_BASE_URL": "http://localhost:5173",
     "ALLOWED_ORIGINS": "http://localhost:5173",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
-    "ALLOW_TEST_MAILBOX": "true"
-  }
+    "ALLOW_TEST_MAILBOX": "true",
+  },
+
+  // Production
+  "env": {
+    "production": {
+      "name": "lingviora-words-api",
+      "workers_dev": false,
+      "routes": [
+        {
+          "pattern": "api.lingviora-words.online",
+          "custom_domain": true,
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "lingviora-words-production",
+          "database_id": "6c44c353-6a2d-4804-b3dd-fe88c88b5109",
+          "migrations_dir": "drizzle",
+        },
+      ],
+      "vars": {
+        "APP_ENV": "production",
+        "APP_BASE_URL": "https://lingviora-words.online",
+        "ALLOWED_ORIGINS": "https://lingviora-words.online",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEo_w0C_7n3U8hFH",
+        "TURNSTILE_EXPECTED_HOSTNAMES": "lingviora-words.online",
+        "EMAIL_FROM": "Lingviora Words <noreply@mail.lingviora-words.online>",
+        "ALLOW_TEST_MAILBOX": "false",
+      },
+    },
+  },
 }

@@ -1,10 +1,22 @@
-# Lingviora Backend
+# Lingviora Words Backend
 
-Окремий Cloudflare Worker API з D1, HTTP-only сесіями, Cloudflare Turnstile, підтвердженням пошти через Resend, лімітами запитів і адаптивним плануванням повторень.
+Cloudflare Worker API з D1, HTTP-only сесіями, Cloudflare Turnstile та відправкою листів через Resend.
+
+## Гілки та середовища
+
+| Подія | Результат |
+| --- | --- |
+| Робота в `develop` + `npm run dev` | Локальний Worker на `http://127.0.0.1:8787`, локальна D1 і MailHog |
+| Push у `develop` або PR | GitHub Actions запускає typecheck і тести без деплою |
+| Push/merge у `prod` | GitHub Actions застосовує D1-міграції та автоматично публікує production Worker |
+
+Production API: `https://api.lingviora-words.online`  
+Production frontend: `https://lingviora-words.online`
 
 ## Локальний запуск
 
 ```bash
+nvm use
 cp .dev.vars.example .dev.vars
 npm ci
 docker compose -f docker-compose.mailhog.yml up -d
@@ -12,73 +24,89 @@ npm run db:local
 npm run dev
 ```
 
-MailHog: `http://localhost:8025`. Локальний relay приймає листи Worker на `http://127.0.0.1:8026/send` і передає їх у MailHog.
+Frontend запускайте окремо на `http://localhost:5173`. Його Vite proxy автоматично направляє `/api` на локальний Worker. MailHog доступний на `http://localhost:8025`.
 
-## Production
+`.dev.vars` містить лише локальні ключі та не потрапляє до Git.
 
-### 1. Підготуйте конфігурацію
+## Одноразове production-налаштування
 
-```bash
-cp wrangler.production.example.jsonc wrangler.production.jsonc
-cp .env.production.example .env.production
-```
+### 1. Додайте домен до Cloudflare
 
-У `wrangler.production.jsonc` замініть усі `example.com`, Turnstile site key та D1 `database_id`:
+Worker custom domain потребує, щоб DNS-зона `lingviora-words.online` керувалася Cloudflare.
 
-- `APP_BASE_URL` — HTTPS-адреса фронтенду, на яку ведуть посилання з листів;
-- `ALLOWED_ORIGINS` — точний origin фронтенду без `/` у кінці;
-- `TURNSTILE_EXPECTED_HOSTNAMES` — дозволені хости фронтенду через кому, без `https://`;
-- `EMAIL_FROM` — адреса на верифікованому домені Resend;
-- `EMAIL_REPLY_TO` — реальна адреса підтримки.
+1. Додайте домен до Cloudflare.
+2. У Cloudflare DNS створіть `A` для `@` → `46.62.131.70` і `CNAME` для `www` → `lingviora-words.online`.
+3. Не створюйте `A`-запис для `api`: його створить Wrangler як Worker custom domain.
+4. У реєстратора замініть nameservers на ті, які видасть Cloudflare, і дочекайтеся статусу **Active**.
 
-Якщо frontend та API розміщені на різних сайтах, встановіть `COOKIE_SAME_SITE` у `none`. Для піддоменів одного HTTPS-домену (`words.example.com` і `api.example.com`) залиште `lax`.
-
-### 2. Створіть реальну капчу
-
-У Cloudflare Dashboard створіть Turnstile widget у режимі **Managed** і додайте всі production-хости фронтенду. Site key запишіть у `wrangler.production.jsonc`, а secret key — лише у `.env.production` як `TURNSTILE_SECRET_KEY`.
-
-Backend обов'язково перевіряє токен через Siteverify, його `action` та hostname. Для реєстрації використовується action `register`, для відновлення пароля — `forgot_password`.
-
-### 3. Налаштуйте реальну пошту
-
-У Resend додайте та підтвердьте окремий піддомен для транзакційних листів, наприклад `account.example.com`. Після DNS-верифікації створіть API key та запишіть його у `.env.production` як `RESEND_API_KEY`.
-
-Secret-файл має містити тільки:
-
-```dotenv
-TURNSTILE_SECRET_KEY="..."
-RESEND_API_KEY="re_..."
-```
-
-Не додавайте `.env.production`, `.dev.vars` або ключі до Git.
-
-### 4. Створіть D1 і розгорніть Worker
+### 2. Створіть production D1
 
 ```bash
+npm ci
+npx wrangler login
 npx wrangler d1 create lingviora-words-production
 ```
 
-Скопіюйте отриманий UUID у `wrangler.production.jsonc`, після чого:
+Збережіть отриманий `database_id`: він потрібен як GitHub variable `D1_DATABASE_ID`.
+
+### 3. Налаштуйте Turnstile і Resend
+
+- Створіть Cloudflare Turnstile widget у режимі **Managed** для `lingviora-words.online` і `www.lingviora-words.online`.
+- У Resend підтвердьте поштовий домен, наприклад `mail.lingviora-words.online`, і створіть API key.
+- Адреса у `EMAIL_FROM` мусить належати підтвердженому в Resend домену.
+
+### 4. Створіть GitHub Environment
+
+У backend-репозиторії відкрийте **Settings → Environments → New environment** і створіть `production`.
+
+Додайте до нього variables:
+
+| Variable | Значення |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | ID Cloudflare-акаунта |
+| `D1_DATABASE_ID` | ID створеної production D1 |
+| `D1_DATABASE_NAME` | `lingviora-words-production` |
+| `TURNSTILE_SITE_KEY` | Публічний production site key |
+| `EMAIL_FROM` | `Lingviora Words <no-reply@mail.lingviora-words.online>` |
+| `EMAIL_REPLY_TO` | Реальна адреса підтримки |
+| `WORKER_CUSTOM_DOMAIN` | `api.lingviora-words.online` |
+
+Додайте secrets:
+
+| Secret | Значення |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Токен з правами на Workers, D1 і Worker routes цієї зони |
+| `TURNSTILE_SECRET_KEY` | Секрет production Turnstile widget |
+| `RESEND_API_KEY` | Production API key Resend |
+
+Workflow не записує секрети у репозиторій. `wrangler.production.jsonc` генерується в GitHub runner із variables і теж ігнорується Git.
+
+## Production-деплой
+
+Рекомендований шлях — Pull Request з `develop` у `prod`. Після merge файл `.github/workflows/deploy-production.yml` автоматично:
+
+1. встановить залежності;
+2. запустить typecheck і тести;
+3. створить production Wrangler config;
+4. застосує нові D1 migrations;
+5. оновить секрети Worker;
+6. розгорне API та перевірить `/api/health`.
+
+Ручний запуск того самого workflow доступний у вкладці **Actions** через `workflow_dispatch`.
+
+## Локальна production-перевірка без збереження секретів у Git
 
 ```bash
-npm run typecheck
-npm test
+cp .env.production.example .env.production
+D1_DATABASE_ID="your-d1-id" \
+TURNSTILE_SITE_KEY="your-site-key" \
+EMAIL_FROM="Lingviora Words <no-reply@mail.lingviora-words.online>" \
+npm run config:production
+
+npm run check
 npm run db:production
 npm run deploy:production -- --secrets-file .env.production
 ```
 
-Для наступної ротації окремого секрету використовуйте:
+Не додавайте `.env.production`, `.dev.vars` або `wrangler.production.jsonc` до Git.
 
-```bash
-npx wrangler secret put TURNSTILE_SECRET_KEY --config wrangler.production.jsonc
-npx wrangler secret put RESEND_API_KEY --config wrangler.production.jsonc
-```
-
-## Що вже захищено
-
-- тестова поштова скринька примусово вимкнена при `APP_ENV=production`;
-- secret key Turnstile і Resend API key не зберігаються у конфігурації або frontend;
-- verification/reset токени одноразові, зберігаються у D1 лише у вигляді хешів і мають термін дії;
-- зміна пошти завершується лише після підтвердження нової адреси;
-- forgot-password не повідомляє, чи існує користувач;
-- production-посилання у листах дозволені лише через HTTPS.
