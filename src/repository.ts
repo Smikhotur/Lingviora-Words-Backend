@@ -1,11 +1,20 @@
 import { HttpError } from "./http";
+import { normalizePronunciationTranscription } from "./pronunciation";
 
 export async function ownsList(db: D1Database, userId: string, listId: string) {
-  return Boolean(await db.prepare("SELECT 1 AS found FROM word_lists WHERE id = ? AND user_id = ? LIMIT 1").bind(listId, userId).first());
+  return Boolean(await ownedList(db, userId, listId));
+}
+
+export async function ownedList(db: D1Database, userId: string, listId: string) {
+  return db.prepare("SELECT id, source_language AS sourceLanguage, target_language AS targetLanguage FROM word_lists WHERE id = ? AND user_id = ? LIMIT 1")
+    .bind(listId, userId)
+    .first<{ id: string; sourceLanguage: string; targetLanguage: string }>();
 }
 
 export async function ownedWord(db: D1Database, userId: string, wordId: string) {
-  return db.prepare(`SELECT w.id, w.list_id AS listId FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.id = ? AND l.user_id = ? LIMIT 1`).bind(wordId, userId).first<{ id: string; listId: string }>();
+  return db.prepare(`SELECT w.id, w.list_id AS listId, w.term, w.transcription, w.pronunciation_audio_url AS pronunciationAudioUrl, l.source_language AS sourceLanguage FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.id = ? AND l.user_id = ? LIMIT 1`)
+    .bind(wordId, userId)
+    .first<{ id: string; listId: string; term: string; transcription: string | null; pronunciationAudioUrl: string | null; sourceLanguage: string }>();
 }
 
 export async function getLists(db: D1Database, userId: string) {
@@ -16,6 +25,6 @@ export async function getLists(db: D1Database, userId: string) {
 export async function getList(db: D1Database, userId: string, listId: string) {
   const list = await db.prepare(`SELECT id, name, source_language AS sourceLanguage, target_language AS targetLanguage, updated_at AS updatedAt FROM word_lists WHERE id = ? AND user_id = ? LIMIT 1`).bind(listId, userId).first<Record<string, unknown>>();
   if (!list) throw new HttpError(404, "Список не знайдено");
-  const words = await db.prepare(`SELECT id, list_id AS listId, term, translation, example, example_translation AS exampleTranslation, note, status, repetitions, correct_streak AS correctStreak, correct_count AS correctCount, attempt_count AS attemptCount, interval_days AS intervalDays, practiced_modes AS practicedModes, next_review_at AS nextReviewAt, updated_at AS updatedAt FROM words WHERE list_id = ? ORDER BY created_at DESC`).bind(listId).all<Record<string, unknown>>();
-  return { ...list, words: words.results.map((word) => ({ ...word, repetitions: Number(word.repetitions), correctStreak: Number(word.correctStreak), correctCount: Number(word.correctCount), attemptCount: Number(word.attemptCount), intervalDays: Number(word.intervalDays), practicedModes: Number(word.practicedModes) })) };
+  const words = await db.prepare(`SELECT id, list_id AS listId, term, translation, transcription, pronunciation_audio_url AS pronunciationAudioUrl, example, example_translation AS exampleTranslation, note, status, repetitions, correct_streak AS correctStreak, correct_count AS correctCount, attempt_count AS attemptCount, interval_days AS intervalDays, practiced_modes AS practicedModes, next_review_at AS nextReviewAt, updated_at AS updatedAt FROM words WHERE list_id = ? ORDER BY created_at DESC`).bind(listId).all<Record<string, unknown>>();
+  return { ...list, words: words.results.map((word) => ({ ...word, transcription: normalizePronunciationTranscription(word.transcription), repetitions: Number(word.repetitions), correctStreak: Number(word.correctStreak), correctCount: Number(word.correctCount), attemptCount: Number(word.attemptCount), intervalDays: Number(word.intervalDays), practicedModes: Number(word.practicedModes) })) };
 }

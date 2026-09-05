@@ -1,6 +1,8 @@
 import { requireUser } from "../auth";
 import { assertTrustedOrigin, firstValidationError, HttpError, json, parseJson } from "../http";
-import { getList, getLists, ownedWord, ownsList } from "../repository";
+import { isEnglishLanguage } from "../languages";
+import { getEnglishPronunciation, normalizePronunciationTranscription } from "../pronunciation";
+import { getList, getLists, ownedList, ownedWord, ownsList } from "../repository";
 import type { Env } from "../types";
 import { listSchema, wordSchema } from "../validation";
 
@@ -39,13 +41,15 @@ export async function listItem(request: Request, env: Env, id: string) {
 export async function createWord(request: Request, env: Env, listId: string) {
   assertTrustedOrigin(request, env);
   const user = await requireUser(env.DB, request);
-  if (!(await ownsList(env.DB, user.id, listId))) throw new HttpError(404, "Список не знайдено");
+  const list = await ownedList(env.DB, user.id, listId);
+  if (!list) throw new HttpError(404, "Список не знайдено");
   const parsed = wordSchema.safeParse(await parseJson(request));
   if (!parsed.success) throw new HttpError(400, firstValidationError(parsed.error));
+  const pronunciation = isEnglishLanguage(list.sourceLanguage) ? await getEnglishPronunciation(env.DB, parsed.data.term) : null;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   try {
-    await env.DB.prepare(`INSERT INTO words (id, list_id, term, translation, example, example_translation, note, status, repetitions, correct_streak, correct_count, attempt_count, ease_factor, interval_days, practiced_modes, next_review_at, last_reviewed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', 0, 0, 0, 0, 250, 0, 0, ?, NULL, ?, ?)`).bind(id, listId, parsed.data.term, parsed.data.translation, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), now, now, now).run();
+    await env.DB.prepare(`INSERT INTO words (id, list_id, term, translation, transcription, pronunciation_audio_url, example, example_translation, note, status, repetitions, correct_streak, correct_count, attempt_count, ease_factor, interval_days, practiced_modes, next_review_at, last_reviewed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 0, 0, 0, 0, 250, 0, 0, ?, NULL, ?, ?)`).bind(id, listId, parsed.data.term, parsed.data.translation, pronunciation?.transcription ?? null, pronunciation?.audioUrl ?? null, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), now, now, now).run();
   } catch (error) {
     if (error instanceof Error && error.message.includes("UNIQUE")) throw new HttpError(409, "Таке слово з цим перекладом уже є у списку");
     throw error;
@@ -65,8 +69,14 @@ export async function wordItem(request: Request, env: Env, id: string) {
   }
   const parsed = wordSchema.safeParse(await parseJson(request));
   if (!parsed.success) throw new HttpError(400, firstValidationError(parsed.error));
+  const english = isEnglishLanguage(word.sourceLanguage);
+  const termChanged = parsed.data.term.normalize("NFKC") !== word.term.normalize("NFKC");
+  const refreshPronunciation = english && (termChanged || (!word.transcription && !word.pronunciationAudioUrl));
+  const pronunciation = refreshPronunciation ? await getEnglishPronunciation(env.DB, parsed.data.term) : null;
+  const transcription = english ? (refreshPronunciation ? pronunciation?.transcription ?? null : normalizePronunciationTranscription(word.transcription)) : null;
+  const pronunciationAudioUrl = english ? (refreshPronunciation ? pronunciation?.audioUrl ?? null : word.pronunciationAudioUrl) : null;
   try {
-    await env.DB.prepare(`UPDATE words SET term = ?, translation = ?, example = ?, example_translation = ?, note = ?, updated_at = ? WHERE id = ?`).bind(parsed.data.term, parsed.data.translation, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), new Date().toISOString(), id).run();
+    await env.DB.prepare(`UPDATE words SET term = ?, translation = ?, transcription = ?, pronunciation_audio_url = ?, example = ?, example_translation = ?, note = ?, updated_at = ? WHERE id = ?`).bind(parsed.data.term, parsed.data.translation, transcription, pronunciationAudioUrl, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), new Date().toISOString(), id).run();
   } catch (error) {
     if (error instanceof Error && error.message.includes("UNIQUE")) throw new HttpError(409, "Таке слово з цим перекладом уже є у списку");
     throw error;

@@ -3,6 +3,8 @@ import type { Env } from "./types";
 
 export type TurnstileAction = "register" | "forgot_password";
 
+const TURNSTILE_TEST_SECRET = "1x0000000000000000000000000000000AA";
+
 export type TurnstileResult = {
   success?: boolean;
   hostname?: string;
@@ -17,16 +19,33 @@ function configuredHostnames(env: Env) {
     .filter(Boolean);
 }
 
-export function turnstileResultIsValid(result: TurnstileResult, action: TurnstileAction, hostnames: string[]) {
-  if (!result.success || result.action !== action) return false;
+export function turnstileResultIsValid(
+  result: TurnstileResult,
+  action: TurnstileAction,
+  hostnames: string[],
+  allowTestAction = false,
+) {
+  const actionIsValid =
+    result.action === action || (allowTestAction && result.action === "test");
+
+  if (!result.success || !actionIsValid) return false;
+
   if (!hostnames.length) return true;
+
   const hostname = result.hostname?.toLowerCase().replace(/\.$/, "");
   return Boolean(hostname && hostnames.includes(hostname));
 }
 
-export async function verifyCaptcha(env: Env, token: string, request: Request, action: TurnstileAction) {
-  if (!env.TURNSTILE_SECRET_KEY) throw new HttpError(503, "Капча ще не налаштована");
-  if (!token || token.length > 2048) throw new HttpError(400, "Некоректна відповідь капчі");
+export async function verifyCaptcha(
+  env: Env,
+  token: string,
+  request: Request,
+  action: TurnstileAction,
+) {
+  if (!env.TURNSTILE_SECRET_KEY)
+    throw new HttpError(503, "Капча ще не налаштована");
+  if (!token || token.length > 2048)
+    throw new HttpError(400, "Некоректна відповідь капчі");
 
   const hostnames = configuredHostnames(env);
   if (env.APP_ENV === "production" && !hostnames.length) {
@@ -40,23 +59,27 @@ export async function verifyCaptcha(env: Env, token: string, request: Request, a
     const body: Record<string, string> = {
       secret: env.TURNSTILE_SECRET_KEY,
       response: token,
-      idempotency_key: crypto.randomUUID()
+      idempotency_key: crypto.randomUUID(),
     };
     const ip = request.headers.get("cf-connecting-ip");
     if (ip) body.remoteip = ip;
-    response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
+    response = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      },
+    );
   } catch {
     throw new HttpError(503, "Сервіс капчі тимчасово недоступний");
   } finally {
     clearTimeout(timeout);
   }
 
-  if (!response.ok) throw new HttpError(503, "Сервіс капчі тимчасово недоступний");
+  if (!response.ok)
+    throw new HttpError(503, "Сервіс капчі тимчасово недоступний");
   let result: TurnstileResult;
   try {
     result = await response.json<TurnstileResult>();
@@ -64,8 +87,23 @@ export async function verifyCaptcha(env: Env, token: string, request: Request, a
     throw new HttpError(503, "Сервіс капчі повернув некоректну відповідь");
   }
 
-  if (!turnstileResultIsValid(result, action, hostnames)) {
-    console.warn("Turnstile validation rejected", { action, hostname: result.hostname, errors: result["error-codes"] });
+  const isLocalTestKey =
+    env.APP_ENV !== "production" &&
+    env.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET;
+
+  const isValid = isLocalTestKey
+    ? result.success === true
+    : turnstileResultIsValid(result, action, hostnames);
+
+  if (!isValid) {
+    console.warn("Turnstile validation rejected", {
+      success: result.success,
+      expectedAction: action,
+      receivedAction: result.action,
+      hostname: result.hostname,
+      errors: result["error-codes"],
+    });
+
     throw new HttpError(400, "Не вдалося підтвердити капчу. Спробуйте ще раз.");
   }
 }

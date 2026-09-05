@@ -7,10 +7,13 @@
     "dev": "wrangler dev --config wrangler.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
+    "check": "npm run typecheck && npm test",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
-    "db:production": "wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc",
-    "deploy:production": "wrangler deploy --config wrangler.production.jsonc"
+    "db:production": "wrangler d1 migrations apply DB --remote --env production --config wrangler.jsonc",
+    "config:production": "node scripts/render-production-config.mjs",
+    "secrets:production": "node scripts/render-production-secrets.mjs",
+    "deploy:production": "wrangler deploy --env production --config wrangler.jsonc"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

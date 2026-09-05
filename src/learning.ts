@@ -1,9 +1,11 @@
 import { calculateReviewState, checkAnswer } from "./learning-core";
 import { HttpError } from "./http";
+import { normalizePronunciationTranscription } from "./pronunciation";
 import type { LearningCard, LearningMode } from "./types";
 
 type StudyWord = {
   id: string; listId: string; term: string; translation: string; example: string | null; exampleTranslation: string | null;
+  transcription: string | null; pronunciationAudioUrl: string | null;
   status: "new" | "learning" | "learned"; repetitions: number; correctStreak: number; correctCount: number;
   attemptCount: number; easeFactor: number; intervalDays: number; practicedModes: number; sourceLanguage: string; targetLanguage: string;
 };
@@ -39,14 +41,15 @@ async function getProgress(db: D1Database, listId: string) {
 }
 
 export async function getNextLearningCard(db: D1Database, userId: string, listId: string): Promise<LearningCard | null> {
-  const word = await db.prepare(`SELECT w.id, w.list_id AS listId, w.term, w.translation, w.example, w.example_translation AS exampleTranslation, w.status, w.repetitions, w.correct_streak AS correctStreak, w.correct_count AS correctCount, w.attempt_count AS attemptCount, w.ease_factor AS easeFactor, w.interval_days AS intervalDays, w.practiced_modes AS practicedModes, l.source_language AS sourceLanguage, l.target_language AS targetLanguage FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.list_id = ? AND l.user_id = ? AND (w.status = 'new' OR w.next_review_at <= ?) ORDER BY CASE w.status WHEN 'learning' THEN 0 WHEN 'new' THEN 1 ELSE 2 END, w.next_review_at ASC, w.attempt_count ASC LIMIT 1`).bind(listId, userId, new Date().toISOString()).first<StudyWord>();
+  const word = await db.prepare(`SELECT w.id, w.list_id AS listId, w.term, w.translation, w.transcription, w.pronunciation_audio_url AS pronunciationAudioUrl, w.example, w.example_translation AS exampleTranslation, w.status, w.repetitions, w.correct_streak AS correctStreak, w.correct_count AS correctCount, w.attempt_count AS attemptCount, w.ease_factor AS easeFactor, w.interval_days AS intervalDays, w.practiced_modes AS practicedModes, l.source_language AS sourceLanguage, l.target_language AS targetLanguage FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.list_id = ? AND l.user_id = ? AND (w.status = 'new' OR w.next_review_at <= ?) ORDER BY CASE w.status WHEN 'learning' THEN 0 WHEN 'new' THEN 1 ELSE 2 END, w.next_review_at ASC, w.attempt_count ASC LIMIT 1`).bind(listId, userId, new Date().toISOString()).first<StudyWord>();
   if (!word) return null;
   const alternatives = await db.prepare(`SELECT translation FROM words WHERE list_id = ? AND id != ? AND translation != ? ORDER BY RANDOM() LIMIT 3`).bind(listId, word.id, word.translation).all<{ translation: string }>();
   const mode = chooseMode(word, alternatives.results.length);
   const progress = await getProgress(db, listId);
-  if (mode === "choice") return { wordId: word.id, mode, prompt: word.term, instruction: `Оберіть переклад · ${word.targetLanguage}`, options: shuffle([word.translation, ...alternatives.results.map((item) => item.translation)]), progress };
-  if (mode === "sentence" && word.example) return { wordId: word.id, mode, prompt: word.example.replace(new RegExp(termPattern(word.term), "giu"), "_____"), instruction: `Вставте пропущене слово · ${word.sourceLanguage}`, exampleTranslation: word.exampleTranslation, progress };
-  return { wordId: word.id, mode: "typing", prompt: word.translation, instruction: `Напишіть слово · ${word.sourceLanguage}`, progress };
+  const pronunciation = { sourceLanguage: word.sourceLanguage, transcription: normalizePronunciationTranscription(word.transcription), pronunciationAudioUrl: word.pronunciationAudioUrl };
+  if (mode === "choice") return { wordId: word.id, mode, prompt: word.term, instruction: `Оберіть переклад · ${word.targetLanguage}`, options: shuffle([word.translation, ...alternatives.results.map((item) => item.translation)]), ...pronunciation, progress };
+  if (mode === "sentence" && word.example) return { wordId: word.id, mode, prompt: word.example.replace(new RegExp(termPattern(word.term), "giu"), "_____"), instruction: `Вставте пропущене слово · ${word.sourceLanguage}`, exampleTranslation: word.exampleTranslation, ...pronunciation, progress };
+  return { wordId: word.id, mode: "typing", prompt: word.translation, instruction: `Напишіть слово · ${word.sourceLanguage}`, ...pronunciation, progress };
 }
 
 export async function recordAnswer(db: D1Database, userId: string, wordId: string, mode: LearningMode, answer: string) {

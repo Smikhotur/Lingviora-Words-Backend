@@ -30,6 +30,9 @@ export type LearningCard = {
   mode: LearningMode;
   prompt: string;
   instruction: string;
+  sourceLanguage: string;
+  transcription: string | null;
+  pronunciationAudioUrl: string | null;
   options?: string[];
   exampleTranslation?: string | null;
   progress: { learned: number; total: number; due: number };
