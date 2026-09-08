@@ -1,6 +1,6 @@
 import { changeEmail, changePassword, testMailbox } from "./routes/account";
 import { forgotPassword, login, logout, me, register, resendVerification, resetPassword, verifyEmail } from "./routes/auth";
-import { answer, known, session } from "./routes/learning";
+import { answer, known, reset, session } from "./routes/learning";
 import { createWord, listIndex, listItem, wordItem } from "./routes/lists";
 import { HttpError, json } from "./http";
 import type { Env } from "./types";
@@ -35,6 +35,7 @@ export async function routeApi(request: Request, env: Env) {
   if (path === "/api/learn/session") { allow(request, ["GET"]); return session(request, env); }
   if (path === "/api/learn/answer") { allow(request, ["POST"]); return answer(request, env); }
   if (path === "/api/learn/known") { allow(request, ["POST"]); return known(request, env); }
+  if (path === "/api/learn/reset") { allow(request, ["POST"]); return reset(request, env); }
 
   const listWordsMatch = path.match(/^\/api\/lists\/([^/]+)\/words$/);
   if (listWordsMatch) { allow(request, ["POST"]); return createWord(request, env, decodeURIComponent(listWordsMatch[1])); }

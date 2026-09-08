@@ -12,13 +12,13 @@ export async function ownedList(db: D1Database, userId: string, listId: string) 
 }
 
 export async function ownedWord(db: D1Database, userId: string, wordId: string) {
-  return db.prepare(`SELECT w.id, w.list_id AS listId, w.term, w.transcription, w.pronunciation_audio_url AS pronunciationAudioUrl, l.source_language AS sourceLanguage FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.id = ? AND l.user_id = ? LIMIT 1`)
+  return db.prepare(`SELECT w.id, w.list_id AS listId, w.term, w.translation, w.transcription, w.pronunciation_audio_url AS pronunciationAudioUrl, l.source_language AS sourceLanguage FROM words w JOIN word_lists l ON l.id = w.list_id WHERE w.id = ? AND l.user_id = ? LIMIT 1`)
     .bind(wordId, userId)
-    .first<{ id: string; listId: string; term: string; transcription: string | null; pronunciationAudioUrl: string | null; sourceLanguage: string }>();
+    .first<{ id: string; listId: string; term: string; translation: string; transcription: string | null; pronunciationAudioUrl: string | null; sourceLanguage: string }>();
 }
 
 export async function getLists(db: D1Database, userId: string) {
-  const result = await db.prepare(`SELECT l.id, l.name, l.source_language AS sourceLanguage, l.target_language AS targetLanguage, l.updated_at AS updatedAt, COUNT(w.id) AS wordCount, COALESCE(SUM(CASE WHEN w.status = 'learned' THEN 1 ELSE 0 END), 0) AS learnedCount, COALESCE(SUM(CASE WHEN w.status = 'new' OR w.next_review_at <= ? THEN 1 ELSE 0 END), 0) AS dueCount FROM word_lists l LEFT JOIN words w ON w.list_id = l.id WHERE l.user_id = ? GROUP BY l.id ORDER BY l.updated_at DESC`).bind(new Date().toISOString(), userId).all<Record<string, unknown>>();
+  const result = await db.prepare(`SELECT l.id, l.name, l.source_language AS sourceLanguage, l.target_language AS targetLanguage, l.updated_at AS updatedAt, COUNT(w.id) AS wordCount, COALESCE(SUM(CASE WHEN w.status = 'learned' THEN 1 ELSE 0 END), 0) AS learnedCount, COALESCE(SUM(CASE WHEN w.status != 'learned' AND (w.status = 'new' OR w.next_review_at <= ?) THEN 1 ELSE 0 END), 0) AS dueCount FROM word_lists l LEFT JOIN words w ON w.list_id = l.id WHERE l.user_id = ? GROUP BY l.id ORDER BY l.updated_at DESC`).bind(new Date().toISOString(), userId).all<Record<string, unknown>>();
   return result.results.map((row) => ({ ...row, wordCount: Number(row.wordCount), learnedCount: Number(row.learnedCount), dueCount: Number(row.dueCount) }));
 }
 
