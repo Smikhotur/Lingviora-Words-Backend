@@ -25,8 +25,20 @@ export type UserSummary = {
 
 export type LearningMode = "choice" | "typing" | "sentence";
 
+export type LearningProgress = {
+  total: number;
+  learned: number;
+  due: number;
+  learning: number;
+  new: number;
+  nextReviewAt: string | null;
+};
+
 export type LearningCard = {
   wordId: string;
+  revision: number;
+  correctStreak: number;
+  requiredStreak: number;
   mode: LearningMode;
   prompt: string;
   instruction: string;
@@ -35,5 +47,5 @@ export type LearningCard = {
   pronunciationAudioUrl: string | null;
   options?: string[];
   exampleTranslation?: string | null;
-  progress: { learned: number; total: number; due: number };
+  progress: LearningProgress;
 };

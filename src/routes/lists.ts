@@ -71,12 +71,17 @@ export async function wordItem(request: Request, env: Env, id: string) {
   if (!parsed.success) throw new HttpError(400, firstValidationError(parsed.error));
   const english = isEnglishLanguage(word.sourceLanguage);
   const termChanged = parsed.data.term.normalize("NFKC") !== word.term.normalize("NFKC");
+  const contentChanged = termChanged || parsed.data.translation.normalize("NFKC") !== word.translation.normalize("NFKC");
   const refreshPronunciation = english && (termChanged || (!word.transcription && !word.pronunciationAudioUrl));
   const pronunciation = refreshPronunciation ? await getEnglishPronunciation(env.DB, parsed.data.term) : null;
   const transcription = english ? (refreshPronunciation ? pronunciation?.transcription ?? null : normalizePronunciationTranscription(word.transcription)) : null;
   const pronunciationAudioUrl = english ? (refreshPronunciation ? pronunciation?.audioUrl ?? null : word.pronunciationAudioUrl) : null;
+  const now = new Date().toISOString();
   try {
-    await env.DB.prepare(`UPDATE words SET term = ?, translation = ?, transcription = ?, pronunciation_audio_url = ?, example = ?, example_translation = ?, note = ?, updated_at = ? WHERE id = ?`).bind(parsed.data.term, parsed.data.translation, transcription, pronunciationAudioUrl, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), new Date().toISOString(), id).run();
+    const resetProgress = contentChanged ? `, status = 'new', repetitions = 0, correct_streak = 0, attempt_count = attempt_count + 1, ease_factor = 250, interval_days = 0, practiced_modes = 0, next_review_at = ?, last_reviewed_at = NULL` : "";
+    const values = [parsed.data.term, parsed.data.translation, transcription, pronunciationAudioUrl, optional(parsed.data.example), optional(parsed.data.exampleTranslation), optional(parsed.data.note), now];
+    if (contentChanged) values.push(now);
+    await env.DB.prepare(`UPDATE words SET term = ?, translation = ?, transcription = ?, pronunciation_audio_url = ?, example = ?, example_translation = ?, note = ?, updated_at = ?${resetProgress} WHERE id = ?`).bind(...values, id).run();
   } catch (error) {
     if (error instanceof Error && error.message.includes("UNIQUE")) throw new HttpError(409, "Таке слово з цим перекладом уже є у списку");
     throw error;
