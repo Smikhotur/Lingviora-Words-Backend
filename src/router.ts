@@ -1,7 +1,9 @@
 import { changeEmail, changePassword, testMailbox } from "./routes/account";
+import { analytics } from "./routes/analytics";
 import { forgotPassword, login, logout, me, register, resendVerification, resetPassword, verifyEmail } from "./routes/auth";
 import { answer, known, reset, session } from "./routes/learning";
 import { createWord, listIndex, listItem, wordItem } from "./routes/lists";
+import { wordAudio } from "./routes/audio";
 import { HttpError, json } from "./http";
 import type { Env } from "./types";
 
@@ -31,6 +33,7 @@ export async function routeApi(request: Request, env: Env) {
   if (path === "/api/account/email") { allow(request, ["POST"]); return changeEmail(request, env); }
   if (path === "/api/account/password") { allow(request, ["POST"]); return changePassword(request, env); }
   if (path === "/api/test-mailbox") { allow(request, ["GET"]); return testMailbox(request, env); }
+  if (path === "/api/analytics") { allow(request, ["GET"]); return analytics(request, env); }
   if (path === "/api/lists") { allow(request, ["GET", "POST"]); return listIndex(request, env); }
   if (path === "/api/learn/session") { allow(request, ["GET"]); return session(request, env); }
   if (path === "/api/learn/answer") { allow(request, ["POST"]); return answer(request, env); }
@@ -41,6 +44,8 @@ export async function routeApi(request: Request, env: Env) {
   if (listWordsMatch) { allow(request, ["POST"]); return createWord(request, env, decodeURIComponent(listWordsMatch[1])); }
   const listMatch = path.match(/^\/api\/lists\/([^/]+)$/);
   if (listMatch) { allow(request, ["GET", "PATCH", "DELETE"]); return listItem(request, env, decodeURIComponent(listMatch[1])); }
+  const wordAudioMatch = path.match(/^\/api\/words\/([^/]+)\/audio$/);
+  if (wordAudioMatch) { allow(request, ["GET"]); return wordAudio(request, env, decodeURIComponent(wordAudioMatch[1])); }
   const wordMatch = path.match(/^\/api\/words\/([^/]+)$/);
   if (wordMatch) { allow(request, ["PATCH", "DELETE"]); return wordItem(request, env, decodeURIComponent(wordMatch[1])); }
   throw new HttpError(404, "Маршрут не знайдено");

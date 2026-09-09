@@ -1,49 +1,57 @@
-# Оновлення навчання Lingviora Words
+# Google Cloud TTS + R2 update
 
-## Заміна файлів
+## What changed
 
-Скопіюйте вміст цього архіву поверх файлів вашого backend-проєкту. Не видаляйте каталог проєкту: збережіть власні налаштування, секрети, Git-історію та локальні дані Wrangler. Файл із приватними ключами `env.production.vars` не включено до архіву оновлення; чинні секрети Worker не змінюються цим кодом.
+- English-word playback now uses Google Cloud Text-to-Speech voice `en-US-Neural2-J`.
+- Audio is generated only on the first play of each distinct word, then cached in the private R2 bucket `lingviora-words-audio`.
+- The browser obtains audio only through an authenticated API route. Each user can hear only words from their own lists.
+- Existing English words automatically use the new voice after deployment. No database migration is needed.
+- IPA transcription continues to come from the current dictionary/Datamuse logic.
 
-Для цього оновлення нових міграцій немає. Таблиці та списки користувачів зберігаються. Не створюйте нову production D1 і не скидайте чинну базу.
+## Before deploy
 
-Перевірка локально (рекомендовано Node.js 24 LTS):
+You have already completed these steps:
+
+- enabled Cloud Text-to-Speech API in Google Cloud project `sonic-choir-373016`;
+- uploaded `GOOGLE_TTS_SERVICE_ACCOUNT_JSON` to the production Worker;
+- created the private R2 bucket `lingviora-words-audio`.
+
+Do not add the Google JSON key to Git or frontend environment variables.
+
+## Deploy order
+
+### 1. Backend
+
+Copy the contents of this archive into `Lingviora-Words-Backend`, then run:
 
 ```bash
-npm ci
-npm run check
+npm ci && npm run check && npm run deploy:production
 ```
 
-Під час наступного оновлення серверів спочатку потрібно розгорнути backend, потім frontend. Новий backend сумісний зі старим frontend; новий frontend використовує розширений API прогресу.
+There are no new D1 migrations.
 
-Команда ручного оновлення вже налаштованого Worker після перевірок:
+### 2. Check the Worker binding
+
+The deploy output must list:
+
+```text
+env.AUDIO (lingviora-words-audio) R2 Bucket
+```
+
+### 3. Frontend
+
+Copy the frontend archive into `Lingviora-Words-Frontend`. On `develop` run:
 
 ```bash
-npm run deploy:production
+npm ci && npm run typecheck && VITE_API_URL=https://api.lingviora-words.online npm run build:production
 ```
 
-Цей архів сам нічого не публікує і не змінює production-секрети.
+Commit, push `develop`, open a PR to `main`, and merge after checks pass.
 
-## Як працює навчання
+## Verify after deployment
 
-- Зараховуються 4 правильні заплановані повторення поспіль. У поточній серії має бути хоча б одна правильна письмова відповідь (написання слова або пропуск у реченні).
-- Після першої правильної відповіді повторення через 1 день, після другої — через 3 дні, після третьої — через 7 днів. За своєчасних відповідей без помилок: день 0 → день 1 → день 4 → день 11; четверта відповідь переводить слово у вивчені.
-- Помилка обнуляє поточну серію та письмове підтвердження й призначає повторення через 10 хвилин. Загальна історія спроб зберігається.
-- «Я вже знаю» переводить слово у вивчені одразу, але не створює вигаданої серії з чотирьох відповідей.
-- Вивчені слова не видаляються з бази: вони зникають з активної черги та залишаються у вкладці «Вивчені». Автоматично у звичайні заняття вони більше не повертаються.
-- «Повернути до навчання» скидає тільки поточне навчання, зберігає історію та робить слово доступним одразу.
-- Зміна самого слова або його перекладу починає навчання цього запису заново. Зміна лише примітки/прикладу не скидає засвоєння.
-- Список з одним словом працює у письмовому режимі та також може бути завершений. Режим речення доступний, коли приклад містить саме записане слово/словосполучення; інакше використовується написання слова.
-
-## Перевірка відповідей
-
-Вибраний переклад перевіряється повністю, включно з комами й крапкою з комою. Письмові відповіді ігнорують регістр, зайві пробіли, різні типи апострофа і кінцеві .!?, але не ігнорують друкарських помилок, дефісів або діакритики. Альтернативи, явно записані у слові через `;`, `,`, `/` або `|`, також приймаються. Не потрібно додавати `to` перед дієсловом, якщо його немає у збереженому слові.
-
-Картка містить revision. Сервер перевіряє актуальність картки, режим і термін повторення та атомарно записує спробу зі зміною прогресу. Подвійне натискання або відповідь зі старої вкладки не можуть збільшити серію двічі.
-
-Додано POST `/api/learn/reset`. GET `/api/learn/session` повертає progress навіть без доступної картки; відповіді answer/known/reset повертають оновлений progress. Старі запити без revision підтримуються, але додаткові серверні перевірки терміну та атомарності залишаються.
-
-## Перевірки
-
-`npm run check` запускає TypeScript та регресійні тести. SQLite-тести використовують чинні SQL-міграції і перевіряють повні переклади, суворе написання, 4 повторення, паралельні запити, відкат транзакцій, доступ до чужих даних, редагування та повернення слова. Production-база під час перевірок не використовується.
-
-Довідка: [транзакційний D1 batch](https://developers.cloudflare.com/d1/worker-api/d1-database/).
+1. Sign in to the site.
+2. Open any English list.
+3. Press the speaker icon for a word.
+4. Refresh the R2 bucket page: after the first successful play, it will contain an MP3 object.
+5. Play the same word again: it should use the stored R2 object without another Google TTS request.

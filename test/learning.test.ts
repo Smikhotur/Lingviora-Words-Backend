@@ -244,3 +244,22 @@ test("changing a translation resets mastery and invalidates any previously issue
   assert.equal(f.wordState(wordId).attempt_count, 2);
   await assert.rejects(recordAnswer(f.db, f.userId, wordId, "typing", "contact", 0), isConflict);
 });
+
+test("English words use the protected Google TTS route in lists and learning cards", async (t) => {
+  const f = fixture(t);
+  const id = f.addWord("hello", "привіт");
+  f.sqlite.prepare("UPDATE words SET pronunciation_audio_url = ? WHERE id = ?").run("https://old.example.com/hello.mp3", id);
+  const list = await getList(f.db, f.userId, f.listId);
+  assert.equal(list.words[0]?.pronunciationAudioUrl, `/api/words/${id}/audio`);
+  const card = await getNextLearningCard(f.db, f.userId, f.listId);
+  assert.equal(card?.pronunciationAudioUrl, `/api/words/${id}/audio`);
+});
+
+test("the protected audio route requires the owner and never exposes an unconfigured bucket", async (t) => {
+  const f = fixture(t);
+  const id = f.addWord("hello", "привіт");
+  const unauthenticated = await worker.fetch(new Request(`https://api.example.com/api/words/${id}/audio`), f.env);
+  assert.equal(unauthenticated.status, 401);
+  const configured = await worker.fetch(await f.authenticatedRequest(`/api/words/${id}/audio`), f.env);
+  assert.equal(configured.status, 503);
+});

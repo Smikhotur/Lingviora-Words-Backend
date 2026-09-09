@@ -1,4 +1,5 @@
 import { clearSession, createSession, getCurrentSession, requireUser } from "../auth";
+import { canViewAnalytics } from "../analytics";
 import { appBaseUrl } from "../config";
 import { anonymousFingerprint, createPasswordHash, hashToken, verifyPassword } from "../crypto";
 import { createEmailToken } from "../email-tokens";
@@ -13,7 +14,7 @@ export async function me(request: Request, env: Env) {
   const session = await getCurrentSession(env.DB, request);
   if (!session) return json({ user: null });
   const { sessionId: _sessionId, sessionExpiresAt: _expiresAt, ...user } = session;
-  return json({ user });
+  return json({ user: { ...user, canViewAnalytics: canViewAnalytics(user) } });
 }
 
 export async function register(request: Request, env: Env) {
@@ -50,7 +51,7 @@ export async function login(request: Request, env: Env) {
   const user = await env.DB.prepare(`SELECT id, password_hash AS passwordHash, password_salt AS passwordSalt, email_verified_at AS emailVerifiedAt FROM users WHERE email = ? LIMIT 1`).bind(parsed.data.email).first<{ id: string; passwordHash: string; passwordSalt: string; emailVerifiedAt: string | null }>();
   const valid = user ? await verifyPassword(parsed.data.password, user.passwordHash, user.passwordSalt) : Boolean(await createPasswordHash(parsed.data.password)) && false;
   if (!user || !valid) throw new HttpError(401, "Неправильна пошта або пароль");
-  return json({ ok: true, verified: Boolean(user.emailVerifiedAt) }, 200, { "set-cookie": await createSession(env.DB, user.id, request, env) });
+  return json({ ok: true, verified: Boolean(user.emailVerifiedAt) }, 200, { "set-cookie": await createSession(env.DB, user.id, request, env, { recordLogin: true }) });
 }
 
 export async function logout(request: Request, env: Env) {

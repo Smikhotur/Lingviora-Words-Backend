@@ -16,12 +16,15 @@ export const users = sqliteTable(
     passwordHash: text("password_hash").notNull(),
     passwordSalt: text("password_salt").notNull(),
     emailVerifiedAt: text("email_verified_at"),
+    lastLoginAt: text("last_login_at"),
+    loginCount: integer("login_count").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
     uniqueIndex("uq_users_email").on(table.email),
     uniqueIndex("uq_users_pending_email").on(table.pendingEmail),
+    index("idx_users_created_id").on(table.createdAt, table.id),
   ],
 );
 

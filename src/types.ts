@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  AUDIO?: R2Bucket;
+  GOOGLE_TTS_SERVICE_ACCOUNT_JSON?: string;
   ASSETS?: Fetcher;
   APP_ENV?: "development" | "test" | "production";
   APP_BASE_URL?: string;
