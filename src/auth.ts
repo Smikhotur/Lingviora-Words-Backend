@@ -29,11 +29,22 @@ function sessionCookie(value: string, request: Request, env: Env, expires?: Date
   ].filter(Boolean).join("; ");
 }
 
-export async function createSession(db: D1Database, userId: string, request: Request, env: Env) {
+export async function createSession(db: D1Database, userId: string, request: Request, env: Env, options: { recordLogin?: boolean } = {}) {
   const token = randomToken(32);
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 86_400_000);
-  await db.prepare(`INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), await hashToken(token), userId, expires.toISOString(), now.toISOString()).run();
+  const timestamp = now.toISOString();
+  const insert = db.prepare(`INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), await hashToken(token), userId, expires.toISOString(), timestamp);
+  if (options.recordLogin) {
+    // Both changes commit together. Increment in SQL to preserve concurrent
+    // logins, and never move the latest timestamp backwards when requests race.
+    await db.batch([
+      insert,
+      db.prepare(`UPDATE users SET login_count = login_count + 1, last_login_at = CASE WHEN last_login_at IS NULL OR last_login_at < ? THEN ? ELSE last_login_at END WHERE id = ?`).bind(timestamp, timestamp, userId)
+    ]);
+  } else {
+    await insert.run();
+  }
   return sessionCookie(token, request, env, expires);
 }
 

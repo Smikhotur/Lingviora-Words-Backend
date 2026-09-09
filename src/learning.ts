@@ -2,6 +2,8 @@ import { calculateReviewState, checkAnswer, normalizeAnswer, REQUIRED_CORRECT_ST
 import { HttpError } from "./http";
 import { normalizePronunciationTranscription } from "./pronunciation";
 import { ownsList } from "./repository";
+import { isEnglishLanguage } from "./languages";
+import { ttsAudioPath } from "./tts";
 import type { LearningCard, LearningMode, LearningProgress } from "./types";
 
 type StudyWord = {
@@ -85,7 +87,7 @@ export async function getNextLearningCard(db: D1Database, userId: string, listId
   const mode = chooseMode(word, alternatives.length);
   const common = {
     wordId: word.id, revision: word.attemptCount, correctStreak: word.correctStreak, requiredStreak: REQUIRED_CORRECT_STREAK,
-    sourceLanguage: word.sourceLanguage, transcription: normalizePronunciationTranscription(word.transcription), pronunciationAudioUrl: word.pronunciationAudioUrl, progress
+    sourceLanguage: word.sourceLanguage, transcription: normalizePronunciationTranscription(word.transcription), pronunciationAudioUrl: isEnglishLanguage(word.sourceLanguage) ? ttsAudioPath(word.id) : word.pronunciationAudioUrl, progress
   };
   if (mode === "choice") return { ...common, mode, prompt: word.term, instruction: `Оберіть переклад · ${word.targetLanguage}`, options: shuffle([word.translation, ...shuffle(alternatives).slice(0, 3)]) };
   if (mode === "sentence" && word.example) return { ...common, mode, prompt: word.example.replace(new RegExp(termPattern(word.term), "giu"), "_____"), instruction: `Вставте пропущене слово · ${word.sourceLanguage}`, exampleTranslation: word.exampleTranslation };

@@ -13,6 +13,9 @@
       "migrations_dir": "drizzle",
     },
   ],
+  "r2_buckets": [
+    { "binding": "AUDIO", "bucket_name": "lingviora-words-audio" },
+  ],
   "vars": {
     "APP_ENV": "development",
     "APP_BASE_URL": "http://localhost:5173",
@@ -39,6 +42,9 @@
           "database_id": "6c44c353-6a2d-4804-b3dd-fe88c88b5109",
           "migrations_dir": "drizzle",
         },
+      ],
+      "r2_buckets": [
+        { "binding": "AUDIO", "bucket_name": "lingviora-words-audio" },
       ],
       "vars": {
         "APP_ENV": "production",

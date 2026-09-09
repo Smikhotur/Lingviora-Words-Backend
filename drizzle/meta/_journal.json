@@ -15,6 +15,13 @@
       "when": 1788619493694,
       "tag": "0001_omniscient_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788926716716,
+      "tag": "0002_user_analytics",
+      "breakpoints": true
     }
   ]
 }
